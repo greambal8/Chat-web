@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Git-Based Chat on GitHub Pages</title>
+    <title>Простой P2P Чат на WebRTC без Сервера</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,21 +16,19 @@
             height: 100vh;
         }
         #chat-container {
-            width: 400px;
+            width: 500px;
             background: white;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             overflow: hidden;
-        }
-        #auth-container {
             padding: 10px;
-            display: none;
         }
         #messages {
-            height: 300px;
+            height: 200px;
             overflow-y: auto;
             padding: 10px;
-            border-bottom: 1px solid #ddd;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
         }
         #messages div {
             margin-bottom: 10px;
@@ -40,7 +38,7 @@
         }
         #input-container {
             display: flex;
-            padding: 10px;
+            margin-bottom: 10px;
         }
         #message-input {
             flex: 1;
@@ -60,20 +58,38 @@
         #send-button:hover {
             background: #0056b3;
         }
+        #setup-container {
+            margin-bottom: 10px;
+        }
+        #local-sdp, #remote-sdp {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        #create-offer, #set-answer, #set-offer, #create-answer {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
         #status {
             padding: 10px;
             color: red;
         }
     </style>
-    <script src="https://unpkg.com/@isomorphic-git/lightning-fs"></script>
-    <script src="https://unpkg.com/isomorphic-git@beta"></script>
 </head>
 <body>
     <div id="chat-container">
-        <div id="auth-container">
-            <input type="text" id="username" placeholder="GitHub Username">
-            <input type="password" id="token" placeholder="Personal Access Token">
-            <button id="auth-button">Авторизоваться</button>
+        <div id="setup-container">
+            <button id="create-offer">Создать Оффер (Инициатор)</button>
+            <button id="create-answer">Создать Ответ (Ответчик)</button>
+            <textarea id="local-sdp" placeholder="Ваш SDP (скопируйте отсюда)"></textarea>
+            <textarea id="remote-sdp" placeholder="SDP собеседника (вставьте сюда)"></textarea>
+            <button id="set-offer">Установить Оффер (Ответчик)</button>
+            <button id="set-answer">Установить Ответ (Инициатор)</button>
         </div>
         <div id="messages"></div>
         <div id="input-container">
@@ -84,130 +100,125 @@
     </div>
 
     <script>
-        // Конфигурация: Замените на ваш GitHub репозиторий
-        const repoUrl = 'https://github.com/YOUR_USERNAME/YOUR_REPO.git'; // Например, https://github.com/username/chat-repo.git
-        const branch = 'main'; // Ветка для чата
-        const dir = '/chat'; // Директория в браузере (виртуальная)
-
-        const fs = new LightningFS('fs');
-        const pfs = fs.promises;
-        let username = '';
-        let token = '';
-        let authenticated = false;
-
-        const authContainer = document.getElementById('auth-container');
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
-        const authButton = document.getElementById('auth-button');
+        const localSdp = document.getElementById('local-sdp');
+        const remoteSdp = document.getElementById('remote-sdp');
+        const createOfferBtn = document.getElementById('create-offer');
+        const setOfferBtn = document.getElementById('set-offer');
+        const createAnswerBtn = document.getElementById('create-answer');
+        const setAnswerBtn = document.getElementById('set-answer');
         const statusDiv = document.getElementById('status');
 
-        // Показать форму аутентификации
-        authContainer.style.display = 'block';
+        let pc;
+        let dataChannel;
 
-        // Аутентификация
-        authButton.addEventListener('click', async () => {
-            username = document.getElementById('username').value.trim();
-            token = document.getElementById('token').value.trim();
-            if (!username || !token) {
-                statusDiv.textContent = 'Введите username и token';
-                return;
-            }
+        // Конфигурация ICE-серверов (STUN для публичного использования)
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // Функция добавления сообщения
+        function addMessage(text, isLocal = true) {
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = text;
+            msgDiv.style.background = isLocal ? '#d4edda' : '#e9e9e9';
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Инициализация PeerConnection
+        function initPC() {
+            pc = new RTCPeerConnection(config);
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate === null) {
+                    localSdp.value = JSON.stringify(pc.localDescription);
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                statusDiv.textContent = `ICE state: ${pc.iceConnectionState}`;
+                if (pc.iceConnectionState === 'disconnected') {
+                    statusDiv.textContent = 'Соединение разорвано';
+                }
+            };
+
+            pc.ondatachannel = (event) => {
+                dataChannel = event.channel;
+                setupDataChannel();
+            };
+        }
+
+        // Настройка DataChannel
+        function setupDataChannel() {
+            dataChannel.onmessage = (event) => {
+                addMessage(`Собеседник: ${event.data}`, false);
+            };
+
+            dataChannel.onopen = () => {
+                statusDiv.textContent = 'Канал открыт! Можно отправлять сообщения.';
+                sendButton.disabled = false;
+            };
+
+            dataChannel.onclose = () => {
+                statusDiv.textContent = 'Канал закрыт.';
+                sendButton.disabled = true;
+            };
+        }
+
+        // Создание оффера (Инициатор)
+        createOfferBtn.addEventListener('click', async () => {
+            initPC();
+            dataChannel = pc.createDataChannel('chat');
+            setupDataChannel();
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            statusDiv.textContent = 'Оффер создан. Скопируйте SDP и отправьте собеседнику.';
+        });
+
+        // Установка оффера и создание ответа (Ответчик)
+        setOfferBtn.addEventListener('click', async () => {
             try {
-                await initRepo();
-                authenticated = true;
-                authContainer.style.display = 'none';
-                statusDiv.textContent = 'Авторизовано успешно';
-                loadMessages();
-                setInterval(loadMessages, 5000); // Обновлять каждые 5 сек
+                const remoteDesc = JSON.parse(remoteSdp.value);
+                await pc.setRemoteDescription(new RTCSessionDescription(remoteDesc));
+                statusDiv.textContent = 'Оффер установлен.';
             } catch (err) {
-                statusDiv.textContent = 'Ошибка аутентификации: ' + err.message;
+                statusDiv.textContent = 'Ошибка: ' + err.message;
             }
         });
 
-        // Инициализация репозитория
-        async function initRepo() {
-            await fs.init({ wipe: true });
-            await git.clone({
-                fs,
-                http: git.http,
-                dir,
-                url: repoUrl,
-                ref: branch,
-                singleBranch: true,
-                depth: 100, // Ограничить глубину для производительности
-                onAuth: () => ({ username, password: token })
-            });
-        }
+        createAnswerBtn.addEventListener('click', async () => {
+            initPC();
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            statusDiv.textContent = 'Ответ создан. Скопируйте SDP и отправьте инициатору.';
+        });
 
-        // Загрузка сообщений (git log)
-        async function loadMessages() {
-            if (!authenticated) return;
+        // Установка ответа (Инициатор)
+        setAnswerBtn.addEventListener('click', async () => {
             try {
-                // Pull изменения
-                await git.pull({
-                    fs,
-                    http: git.http,
-                    dir,
-                    ref: branch,
-                    singleBranch: true,
-                    author: { name: username, email: `${username}@example.com` },
-                    onAuth: () => ({ username, password: token })
-                });
-
-                // Получить лог
-                const commits = await git.log({
-                    fs,
-                    dir,
-                    ref: branch,
-                    depth: 50
-                });
-
-                messagesDiv.innerHTML = '';
-                commits.reverse().forEach(commit => {
-                    if (commit.commit.message.trim() !== 'Initial commit') { // Пропустить initial
-                        const msgDiv = document.createElement('div');
-                        msgDiv.textContent = `${commit.commit.committer.name}: ${commit.commit.message}`;
-                        messagesDiv.appendChild(msgDiv);
-                    }
-                });
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                const remoteDesc = JSON.parse(remoteSdp.value);
+                await pc.setRemoteDescription(new RTCSessionDescription(remoteDesc));
+                statusDiv.textContent = 'Ответ установлен. Ожидайте соединения.';
             } catch (err) {
-                statusDiv.textContent = 'Ошибка загрузки: ' + err.message;
+                statusDiv.textContent = 'Ошибка: ' + err.message;
             }
-        }
+        });
 
         // Отправка сообщения
-        sendButton.addEventListener('click', async () => {
-            if (!authenticated) {
-                statusDiv.textContent = 'Сначала авторизуйтесь';
-                return;
-            }
+        sendButton.addEventListener('click', () => {
             const text = messageInput.value.trim();
-            if (!text) return;
-
-            try {
-                // Создать пустой файл или использовать tree для commit без изменений файлов
-                await git.commit({
-                    fs,
-                    dir,
-                    message: text,
-                    author: { name: username, email: `${username}@example.com` }
-                });
-
-                // Push
-                await git.push({
-                    fs,
-                    http: git.http,
-                    dir,
-                    ref: branch,
-                    onAuth: () => ({ username, password: token })
-                });
-
+            if (text && dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(text);
+                addMessage(`Вы: ${text}`);
                 messageInput.value = '';
-                loadMessages();
-            } catch (err) {
-                statusDiv.textContent = 'Ошибка отправки: ' + err.message;
+            } else {
+                statusDiv.textContent = 'Канал не открыт или сообщение пустое.';
             }
         });
 
@@ -217,6 +228,9 @@
                 sendButton.click();
             }
         });
+
+        // Изначально кнопка отправки отключена
+        sendButton.disabled = true;
     </script>
 </body>
 </html>
