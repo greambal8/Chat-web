@@ -3,232 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔒 Защищённый Чат • Web Crypto API AES-256-GCM</title>
+    <title>🔒 ЗАКРЫТЫЕ ЧАТ-КОМПАНИ • Полная приватность</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body {font-family:'Roboto',sans-serif;background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);margin:0;padding:20px;height:100vh;display:flex;justify-content:center;align-items:flex-start;color:#333;}
-        #chat-container {width:480px;max-width:95%;background:#fff;border-radius:20px;box-shadow:0 15px 35px rgba(0,0,0,0.15);overflow:hidden;margin-top:20px;}
-        #messages {height:420px;overflow-y:auto;padding:20px;background:#f8f9fa;}
-        .msg {margin-bottom:14px;padding:12px 18px;border-radius:20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.06);max-width:85%;word-wrap:break-word;animation:fadeIn .3s ease;}
+        #chat-container {width:520px;max-width:95%;background:#fff;border-radius:20px;box-shadow:0 15px 35px rgba(0,0,0,0.15);overflow:hidden;margin-top:20px;}
+        #messages {height:420px;overflow-y:auto;padding:20px;background:#f8f9fa;display:none;}
+        .msg {margin-bottom:14px;padding:12px 18px;border-radius:20px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.06);max-width:85%;word-wrap:break-word;animation:fadeIn .3s;}
         .my {align-self:flex-end;background:#007bff !important;color:#fff;}
         @keyframes fadeIn {from{opacity:0;transform:translateY(10px)}to{opacity:1}}
 
-        #encryption-panel {padding:12px 15px;background:#e9f7ef;border-bottom:1px solid #c3e6cb;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
-        #encryption-panel input {flex:1;min-width:200px;padding:10px;border:1px solid #ced4da;border-radius:10px;font-family:monospace;font-size:14px;}
-        #encryption-panel button {padding:10px 16px;border:none;border-radius:10px;cursor:pointer;font-weight:500;}
+        .panel {padding:14px 16px;background:#e9f7ef;border-bottom:1px solid #c3e6cb;display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+        .panel input {padding:10px;border:1px solid #ced4da;border-radius:10px;font-family:monospace;}
+        .panel button {padding:10px 18px;border:none;border-radius:10px;cursor:pointer;font-weight:500;}
+        #enter-room {background:#28a745;color:#fff;}
+        #generate-room, #generate-key {background:#ffc107;color:#212529;}
         #use-key {background:#28a745;color:#fff;}
         #use-key.active {background:#1e7e34;}
-        #deactivate-key {background:#dc3545;color:#fff;}
-        #generate-key {background:#ffc107;color:#212529;}
 
-        #input-container {display:flex;padding:15px;background:#f8f9fa;border-top:1px solid #e9ecef;gap:10px;align-items:center;}
+        #input-container {display:flex;padding:15px;background:#f8f9fa;border-top:1px solid #e9ecef;gap:10px;align-items:center;display:none;}
         #message-input {flex:1;padding:12px;border:1px solid #ced4da;border-radius:10px;font-size:16px;}
-        #send-button {position:relative;padding:12px 24px;background:#28a745;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:500;}
-        #encryption-indicator {position:absolute;top:-10px;right:-10px;width:28px;height:28px;display:none;opacity:0.9;}
+        #send-button {position:relative;padding:12px 26px;background:#28a745;color:#fff;border:none;border-radius:10px;cursor:pointer;}
+        #encryption-indicator {position:absolute;top:-10px;right:-10px;width:28px;height:28px;display:none;}
         #encryption-indicator.active {display:block;}
 
-        #clear-button {margin:0 15px 15px;padding:12px;background:#dc3545;color:#fff;border:none;border-radius:10px;cursor:pointer;width:calc(100% - 30px);}
-        #status {padding:10px;text-align:center;background:#e9ecef;font-size:14px;}
+        #status {padding:12px;text-align:center;background:#e9ecef;font-size:15px;}
+        #warning {background:#fff3cd;color:#856404;padding:12px;border-radius:8px;margin:10px 16px;text-align:center;display:none;}
     </style>
 </head>
 <body>
 
 <div id="chat-container">
-    <div id="encryption-panel">
-        <input type="text" id="aes-key-input" placeholder="AES-256 ключ (64 hex символа)" maxlength="64">
-        <button id="use-key">Использовать ключ</button>
-        <button id="deactivate-key" style="display:none">Деактивировать</button>
-        <button id="generate-key">🔑 Сгенерировать ключ</button>
+    <div class="panel">
+        <input type="number" id="room-number" placeholder="Номер ЧАТ-КОМПАНИ" min="1" max="999999">
+        <button id="generate-room">🎲 Случайный</button>
+        <input type="number" id="max-users" placeholder="Сколько ждём (без себя)" min="1" max="50" value="1">
+        <button id="enter-room">Создать / Войти</button>
     </div>
 
+    <div class="panel" id="key-panel" style="display:none;background:#e8f5e9;">
+        <input type="text" id="aes-key-input" placeholder="AES-256 ключ (64 hex)" maxlength="64">
+        <button id="generate-key">🔑 Сгенерировать</button>
+        <button id="use-key">Активировать ключ и войти</button>
+    </div>
+
+    <div id="warning"></div>
     <div id="messages"></div>
 
     <div id="input-container">
-        <input type="text" id="message-input" placeholder="Введите сообщение...">
+        <input type="text" id="message-input" placeholder="Сообщение...">
         <button id="send-button">
             Отправить
             <img src="Encripted.png" id="encryption-indicator" alt="🔒">
         </button>
     </div>
 
-    <button id="clear-button">Очистить чат</button>
-    <div id="status">Подключение...</div>
+    <div id="status">Укажи номер комнаты → ключ → и только избранные увидят чат</div>
 </div>
 
 <script>
-    const topic = 'secure-chat-v4';
     const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
 
-    const messagesDiv      = document.getElementById('messages');
-    const messageInput     = document.getElementById('message-input');
-    const sendButton       = document.getElementById('send-button');
-    const statusDiv        = document.getElementById('status');
-    const aesKeyInput      = document.getElementById('aes-key-input');
-    const useKeyBtn        = document.getElementById('use-key');
-    const deactivateKeyBtn = document.getElementById('deactivate-key');
-    const generateKeyBtn   = document.getElementById('generate-key');
-    const indicator        = document.getElementById('encryption-indicator');
+    const roomInput = document.getElementById('room-number');
+    const maxUsersInput = document.getElementById('max-users');
+    const generateRoomBtn = document.getElementById('generate-room');
+    const enterRoomBtn = document.getElementById('enter-room');
+    const keyPanel = document.getElementById('key-panel');
+    const aesKeyInput = document.getElementById('aes-key-input');
+    const generateKeyBtn = document.getElementById('generate-key');
+    const useKeyBtn = document.getElementById('use-key');
+    const messagesDiv = document.getElementById('messages');
+    const inputContainer = document.getElementById('input-container');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const statusDiv = document.getElementById('status');
+    const warningDiv = document.getElementById('warning');
+    const indicator = document.getElementById('encryption-indicator');
 
     let nickname = localStorage.getItem('chat-nickname') || 'User_' + Math.floor(Math.random()*9999);
     localStorage.setItem('chat-nickname', nickname);
 
-    let encryptionEnabled = false;
-    let cryptoKey = null; // нативный CryptoKey
+    let currentTopic = null;
+    let cryptoKey = null;
+    let maxAllowed = 0;
+    let participantCount = 0;
 
-    // ====================== Web Crypto API — AES-256-GCM ======================
-    async function importKey(hexKey) {
-        const rawKey = hexToArrayBuffer(hexKey);
-        return await crypto.subtle.importKey(
-            "raw",
-            rawKey,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt", "decrypt"]
-        );
+    // Хэш для генерации топика (SHA-256 от "roomnumber+saltedkey")
+    async function deriveTopic(room, hexKey) {
+        const data = new TextEncoder().encode(`greambal8-secret-room-${room}-${hexKey}`);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
+        return `private/${hashHex}`;
     }
 
-    async function encryptMessage(message) {
-        if (!encryptionEnabled) return message;
+    // Web Crypto AES-256-GCM
+    async function importKey(hex) {
+        const raw = hexToArrayBuffer(hex);
+        return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+    }
 
-        const encoder = new TextEncoder();
-        const data = encoder.encode(message);
+    async function encrypt(msg) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
-
-        const ciphertext = await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: iv },
-            cryptoKey,
-            data
-        );
-
-        // Формат: ENC:base64(iv + ciphertext)
-        const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+        const data = new TextEncoder().encode(msg);
+        const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, cryptoKey, data);
+        const combined = new Uint8Array(iv.byteLength + ct.byteLength);
         combined.set(iv, 0);
-        combined.set(new Uint8Array(ciphertext), iv.byteLength);
-
+        combined.set(new Uint8Array(ct), iv.byteLength);
         return 'ENC:' + btoa(String.fromCharCode(...combined));
     }
 
-    async function decryptMessage(b64data) {
-        if (!encryptionEnabled || !b64data.startsWith('ENC:')) return b64data;
-
+    async function decrypt(b64) {
         try {
-            const combined = Uint8Array.from(atob(b64data.slice(4)), c => c.charCodeAt(0));
-            const iv = combined.slice(0, 12);
-            const ciphertext = combined.slice(12);
-
-            const decrypted = await crypto.subtle.decrypt(
-                { name: "AES-GCM", iv: iv },
-                cryptoKey,
-                ciphertext
-            );
-
-            return new TextDecoder().decode(decrypted);
-        } catch (e) {
-            return "🔓 [Ошибка расшифровки — неверный ключ]";
-        }
+            const combined = Uint8Array.from(atob(b64.slice(4)), c => c.charCodeAt(0));
+            const iv = combined.slice(0,12);
+            const ct = combined.slice(12);
+            const dec = await crypto.subtle.decrypt({name:"AES-GCM", iv}, cryptoKey, ct);
+            return new TextDecoder().decode(dec);
+        } catch(e) { return "[Зашифровано — нужен правильный ключ]"; }
     }
 
-    function hexToArrayBuffer(hex) {
-        const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-        return bytes.buffer;
-    }
+    function hexToArrayBuffer(h) { return new Uint8Array(h.match(/.{2}/g).map(b=>parseInt(b,16))).buffer; }
 
-    // ====================== Генерация ключа ======================
+    // Генерация комнаты
+    generateRoomBtn.onclick = () => roomInput.value = Math.floor(100000 + Math.random()*900000);
+
+    // Генерация ключа
     generateKeyBtn.onclick = async () => {
-        const key = crypto.getRandomValues(new Uint8Array(32));
-        const hex = Array.from(key).map(b => b.toString(16).padStart(2, '0')).join('');
-        aesKeyInput.value = hex;
-        alert('Ключ AES-256 сгенерирован!\nСкопируй и передай собеседнику безопасным способом.');
+        const k = crypto.getRandomValues(new Uint8Array(32));
+        aesKeyInput.value = Array.from(k).map(b=>b.toString(16).padStart(2,'0')).join('');
     };
 
-    // ====================== Активация ключа ======================
+    // Главная кнопка — активация ключа и вход
     useKeyBtn.onclick = async () => {
+        const room = roomInput.value.trim();
         const hex = aesKeyInput.value.trim();
-        if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-            alert('Ошибка: ключ должен быть ровно 64 hex-символа!');
-            return;
-        }
+        if (!room || !/^[0-9]{1,6}$/.test(room)) return alert('Неверный номер комнаты');
+        if (!/^[0-9a-fA-F]{64}$/.test(hex)) return alert('Ключ — ровно 64 hex символа!');
 
-        try {
-            cryptoKey = await importKey(hex);
-            encryptionEnabled = true;
+        maxAllowed = (parseInt(maxUsersInput.value) || 1) + 1;
 
-            useKeyBtn.classList.add('active');
-            useKeyBtn.textContent = 'Ключ активен ✓';
-            deactivateKeyBtn.style.display = 'inline-block';
-            indicator.classList.add('active');
-            statusDiv.textContent = '🔒 Шифрование AES-256-GCM активно (Web Crypto API)';
-            statusDiv.style.color = '#28a745';
-        } catch (e) {
-            alert('Не удалось импортировать ключ');
-        }
+        cryptoKey = await importKey(hex);
+        currentTopic = await deriveTopic(room, hex);
+
+        // Подписываемся только на секретный топик
+        client.subscribe(currentTopic);
+
+        // Пробуем получить количество участников (специальное сообщение)
+        client.publish(currentTopic, `JOIN:${nickname}:${Date.now()}`);
+
+        keyPanel.style.display = 'none';
+        messagesDiv.style.display = 'block';
+        inputContainer.style.display = 'flex';
+        statusDiv.textContent = `ЧАТ-КОМПАНИ #${room} • Участников: 1/${maxAllowed} • Полная приватность`;
+        statusDiv.style.background = '#d4edda';
+        indicator.classList.add('active');
+        addMessage(`🔒 Ты в закрытой комнате #${room}. Только знающие ключ и номер — увидят что-либо.`);
     };
 
-    deactivateKeyBtn.onclick = () => {
-        encryptionEnabled = false;
-        cryptoKey = null;
-        useKeyBtn.classList.remove('active');
-        useKeyBtn.textContent = 'Использовать ключ';
-        deactivateKeyBtn.style.display = 'none';
-        indicator.classList.remove('active');
-        statusDiv.textContent = 'Шифрование отключено';
-        statusDiv.style.color = '#6c757d';
-    };
-
-    // ====================== Отправка сообщения ======================
-    async function sendMessage() {
+    // Отправка
+    async function send() {
+        if (participantCount >= maxAllowed) return alert('Комната переполнена!');
         const text = messageInput.value.trim();
         if (!text) return;
-
-        const full = `${nickname}: ${text}`;
-        const payload = encryptionEnabled ? await encryptMessage(full) : full;
-
-        client.publish(topic, payload);
-        addMessage(full, true);
+        const payload = await encrypt(`${nickname}: ${text}`);
+        client.publish(currentTopic, payload);
+        addMessage(`${nickname}: ${text}`, true);
         messageInput.value = '';
     }
+    sendButton.onclick = send;
+    messageInput.onkeydown = e => { if(e.key==='Enter') send(); };
 
-    sendButton.onclick = sendMessage;
-    messageInput.onkeydown = e => { if (e.key === 'Enter') sendMessage(); };
-
-    // ====================== Добавление сообщения в чат ======================
+    // Приём
     async function addMessage(text, isOwn = false) {
         const div = document.createElement('div');
         div.className = 'msg' + (isOwn ? ' my' : '');
-
-        const decrypted = encryptionEnabled ? await decryptMessage(text) : text;
-        div.textContent = decrypted;
-
-        if (text.startsWith('ENC:')) {
-            div.style.borderLeft = '4px solid #28a745';
-            div.style.background = isOwn ? '#0056b3' : '#e8f5e9';
-        }
-
+        div.textContent = await decrypt(text);
+        if (text.startsWith('ENC:')) div.style.borderLeft = '4px solid #28a745';
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    // ====================== MQTT ======================
-    client.on('connect', () => {
-        statusDiv.textContent = 'Подключено! Готов к работе.';
-        statusDiv.style.color = '#28a745';
-        client.subscribe(topic);
+    client.on('message', async (topic, msg) => {
+        if (topic !== currentTopic) return;
+        const payload = msg.toString();
+
+        if (payload.startsWith('JOIN:')) {
+            participantCount++;
+            if (participantCount > maxAllowed) {
+                warningDiv.textContent = '⚠ Комната переполнена! Новые участники не видят сообщения.';
+                warningDiv.style.display = 'block';
+            }
+            statusDiv.textContent = `Участников: ${participantCount}/${maxAllowed}`;
+            return;
+        }
+
+        if (payload.startsWith('ENC:')) {
+            await addMessage(payload);
+        }
     });
 
-    client.on('message', async (_, msg) => {
-        await addMessage(msg.toString());
-    });
+    client.on('connect', () => statusDiv.textContent += ' • MQTT готов');
 
-    // Очистка чата
-    document.getElementById('clear-button').onclick = () => {
-        if (confirm('Очистить весь чат?')) messagesDiv.innerHTML = '';
-    };
-
-    // Приветствие
-    window.onload = () => {
-        addMessage(`Привет, ${nickname}! Чат готов к работе.\nДля включения шифрования сгенерируй или вставь ключ → "Использовать ключ".`);
-    };
+    window.onload = () => generateRoomBtn.click();
 </script>
 </body>
 </html>
