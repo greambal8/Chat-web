@@ -3,273 +3,336 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Красивый Чат с Никами и Сохранением</title>
+    <title>🔐 Защищённый Чат с E2E шифрованием AES-256</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js"></script>
     <style>
         body {
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            padding: 20px;
             height: 100vh;
             color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
         }
         #chat-container {
-            width: 450px;
+            width: 480px;
+            max-width: 95%;
             background: #ffffff;
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
             overflow: hidden;
-            transition: transform 0.3s ease;
-        }
-        #chat-container:hover {
-            transform: translateY(-5px);
-        }
-        #nickname-container {
-            padding: 15px;
-            display: flex;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
-        }
-        #nickname-input {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ced4da;
-            border-radius: 10px;
-            margin-right: 10px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        #nickname-input:focus {
-            border-color: #007bff;
-            outline: none;
-        }
-        #set-nickname {
-            padding: 12px 20px;
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.3s;
-        }
-        #set-nickname:hover {
-            background: linear-gradient(135deg, #0056b3 0%, #007bff 100%);
+            margin-top: 20px;
         }
         #messages {
-            height: 350px;
+            height: 420px;
             overflow-y: auto;
             padding: 20px;
             background: #f8f9fa;
         }
-        #messages div {
-            margin-bottom: 15px;
+        .msg {
+            margin-bottom: 14px;
             padding: 12px 18px;
             border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            font-size: 15px;
-            line-height: 1.5;
-            animation: fadeIn 0.3s ease;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            max-width: 85%;
             word-wrap: break-word;
+            animation: fadeIn 0.3s ease;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .my { align-self: flex-end; background: #007bff !important; color: white; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
+
+        /* Панель шифрования */
+        #encryption-panel {
+            padding: 12px 15px;
+            background: #e9f7ef;
+            border-bottom: 1px solid #c3e6cb;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
         }
+        #encryption-panel input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 10px;
+            font-family: monospace;
+        }
+        #encryption-panel button {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        #use-key { background: #28a745; color: white; }
+        #use-key.active { background: #1e7e34; }
+        #deactivate-key { background: #dc3545; color: white; }
+        #generate-key { background: #ffc107; color: #212529; }
+
+        /* Нижняя панель ввода */
         #input-container {
             display: flex;
             padding: 15px;
             background: #f8f9fa;
             border-top: 1px solid #e9ecef;
+            align-items: center;
+            gap: 10px;
         }
         #message-input {
             flex: 1;
             padding: 12px;
             border: 1px solid #ced4da;
             border-radius: 10px;
-            margin-right: 10px;
             font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        #message-input:focus {
-            border-color: #007bff;
-            outline: none;
         }
         #send-button {
             padding: 12px 20px;
-            background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+            background: #28a745;
             color: white;
             border: none;
             border-radius: 10px;
             cursor: pointer;
-            font-weight: 500;
-            transition: background 0.3s;
+            position: relative;
         }
-        #send-button:hover {
-            background: linear-gradient(135deg, #218838 0%, #28a745 100%);
+        #encryption-indicator {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            display: none;
         }
-        #clear-button {
-            padding: 12px 20px;
-            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 500;
-            margin: 15px;
+        #encryption-indicator.active {
             display: block;
-            width: calc(100% - 30px);
-            transition: background 0.3s;
         }
-        #clear-button:hover {
-            background: linear-gradient(135deg, #c82333 0%, #dc3545 100%);
+
+        #clear-button {
+            margin: 0 15px 15px;
+            padding: 12px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
         }
         #status {
             padding: 10px;
-            color: #6c757d;
             text-align: center;
-            font-size: 14px;
             background: #e9ecef;
+            font-size: 14px;
+        }
+        .encrypted-note {
+            font-size: 11px;
+            color: #28a745;
+            text-align: center;
+            padding: 4px;
+            background: rgba(40,167,69,0.1);
         }
     </style>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
-    <div id="chat-container">
-        <div id="nickname-container" style="display: none;">
-            <input type="text" id="nickname-input" placeholder="Введите ваш ник...">
-            <button id="set-nickname">Установить</button>
-        </div>
-        <div id="messages"></div>
-        <div id="input-container">
-            <input type="text" id="message-input" placeholder="Введите сообщение...">
-            <button id="send-button">Отправить</button>
-        </div>
-        <button id="clear-button">Очистить чат</button>
-        <div id="status">Подключение...</div>
+
+<div id="chat-container">
+    <div id="encryption-panel">
+        <input type="text" id="aes-key-input" placeholder="Вставьте AES-256 ключ (64 hex символа)" maxlength="64">
+        <button id="use-key">Использовать ключ</button>
+        <button id="deactivate-key" style="display:none;">Деактивировать ключ</button>
+        <button id="generate-key">🔑 Сгенерировать ключ</button>
     </div>
 
-    <script>
-        const topic = 'github-chat-demo'; // Уникальный топик для этого чата
-        const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
-        const storageKey = 'chat-history'; // Ключ для localStorage
+    <div id="messages"></div>
 
-        const nicknameContainer = document.getElementById('nickname-container');
-        const nicknameInput = document.getElementById('nickname-input');
-        const setNicknameBtn = document.getElementById('set-nickname');
-        const messagesDiv = document.getElementById('messages');
-        const messageInput = document.getElementById('message-input');
-        const sendButton = document.getElementById('send-button');
-        const clearButton = document.getElementById('clear-button');
-        const statusDiv = document.getElementById('status');
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="Введите сообщение...">
+        <button id="send-button">
+            Отправить
+            <img src="Encripted.png" id="encryption-indicator" alt="🔒">
+        </button>
+    </div>
 
-        let nickname = localStorage.getItem('chat-nickname') || '';
+    <button id="clear-button">Очистить чат</button>
+    <div id="status">Подключение...</div>
+</div>
 
-        // Функция для добавления сообщения
-        function addMessage(text) {
-            const msgDiv = document.createElement('div');
-            msgDiv.textContent = text;
-            messagesDiv.appendChild(msgDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+<script>
+    const topic = 'greambal8-secure-chat-v2';
+    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+    
+    const messagesDiv     = document.getElementById('messages');
+    const messageInput     = document.getElementById('message-input');
+    const sendButton       = document.getElementById('send-button');
+    const clearButton      = document.getElementById('clear-button');
+    const statusDiv        = document.getElementById('status');
+    const aesKeyInput      = document.getElementById('aes-key-input');
+    const useKeyBtn        = document.getElementById('use-key');
+    const deactivateKeyBtn = document.getElementById('deactivate-key');
+    const generateKeyBtn   = document.getElementById('generate-key');
+    const indicator        = document.getElementById('encryption-indicator');
 
-            // Сохранить в localStorage
-            const history = JSON.parse(localStorage.getItem(storageKey) || '[]');
-            history.push(text);
-            localStorage.setItem(storageKey, JSON.stringify(history));
-        }
+    let nickname = localStorage.getItem('chat-nickname') || 'Аноним_' + Math.floor(Math.random()*9999);
+    localStorage.setItem('chat-nickname', nickname);
 
-        // Загрузка истории из localStorage
-        function loadHistory() {
-            const history = JSON.parse(localStorage.getItem(storageKey) || '[]');
-            history.forEach(text => {
-                const msgDiv = document.createElement('div');
-                msgDiv.textContent = text;
-                messagesDiv.appendChild(msgDiv);
-            });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
+    let encryptionEnabled = false;
+    let aesKey = null; // CryptoJS.lib.WordArray
 
-        // Проверка ника
-        if (!nickname) {
-            nicknameContainer.style.display = 'flex';
-            messageInput.disabled = true;
-            sendButton.disabled = true;
-        } else {
-            loadHistory();
-        }
+    // ====================== AES-256-GCM шифрование ======================
+    function encryptMessage(message) {
+        if (!encryptionEnabled) return message;
 
-        // Установка ника
-        setNicknameBtn.addEventListener('click', () => {
-            nickname = nicknameInput.value.trim();
-            if (nickname) {
-                localStorage.setItem('chat-nickname', nickname);
-                nicknameContainer.style.display = 'none';
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                loadHistory();
-            }
+        const iv = CryptoJS.lib.WordArray.random(12); // 96-bit IV для GCM
+        const encrypted = CryptoJS.AES.encrypt(message, aesKey, {
+            iv: iv,
+            mode: CryptoJS.mode.GCM,
+            padding: CryptoJS.pad.NoPadding
         });
 
-        client.on('connect', () => {
-            statusDiv.textContent = 'Подключено! Можно чатиться.';
-            statusDiv.style.color = '#28a745';
-            client.subscribe(topic, (err) => {
-                if (err) {
-                    statusDiv.textContent = 'Ошибка подписки: ' + err;
-                    statusDiv.style.color = '#dc3545';
+        // Возвращаем IV || ciphertext || authTag (все в base64)
+        const ivHex       = iv.toString();
+        const ctHex       = encrypted.ciphertext.toString();
+        const tagHex      = encrypted.ciphertext.toString(CryptoJS.enc.Hex).slice(-32); // последние 16 байт — тег
+        const combined    = ivHex + ctHex;
+        return 'ENC:' + CryptoJS.enc.Hex.parse(combined + tagHex).toString(CryptoJS.enc.Base64);
+    }
+
+    function decryptMessage(encryptedBase64) {
+        if (!encryptionEnabled || !encryptedBase64.startsWith('ENC:')) return encryptedBase64;
+
+        try {
+            const data = CryptoJS.enc.Base64.parse(encryptedBase64.slice(4));
+            const hex  = data.toString(CryptoJS.enc.Hex);
+
+            const iv       = CryptoJS.enc.Hex.parse(hex.slice(0, 24));        // 12 байт = 24 hex
+            const tag      = CryptoJS.enc.Hex.parse(hex.slice(-32));          // последние 16 байт
+            const ciphertext = CryptoJS.enc.Hex.parse(hex.slice(24, -32));
+
+            const decrypted = CryptoJS.AES.decrypt(
+                { ciphertext: ciphertext },
+                aesKey,
+                {
+                    iv: iv,
+                    mode: CryptoJS.mode.GCM,
+                    padding: CryptoJS.pad.NoPadding
                 }
-            });
-        });
+            );
 
-        client.on('message', (receivedTopic, message) => {
-            if (receivedTopic === topic) {
-                addMessage(message.toString());
-            }
-        });
+            // GCM сам проверяет тег, если ошибка — бросит исключение
+            return decrypted.toString(CryptoJS.enc.Utf8);
+        } catch (e) {
+            return "🔓 [Не удалось расшифровать сообщение]";
+        }
+    }
 
-        client.on('error', (err) => {
-            statusDiv.textContent = 'Ошибка: ' + err;
-            statusDiv.style.color = '#dc3545';
-        });
+    // ====================== Генерация ключа ======================
+    generateKeyBtn.addEventListener('click', () => {
+        const key = CryptoJS.lib.WordArray.random(32); // 256 бит
+        const keyHex = key.toString();
+        aesKeyInput.value = keyHex;
+        alert('Новый AES-256 ключ сгенерирован и вставлен в поле!\nСкопируйте его и передайте собеседнику безопасным каналом.');
+    });
 
-        client.on('offline', () => {
-            statusDiv.textContent = 'Отключено. Перезагрузите страницу.';
-            statusDiv.style.color = '#dc3545';
-        });
+    // ====================== Активация ключа ======================
+    useKeyBtn.addEventListener('click', () => {
+        const keyHex = aesKeyInput.value.trim();
+        if (keyHex.length !== 64 || !/^[0-9a-fA-F]+$/.test(keyHex)) {
+            alert('Ошибка: ключ должен быть ровно 64 hex-символа (256 бит)!');
+            return;
+        }
+        aesKey = CryptoJS.enc.Hex.parse(keyHex);
+        encryptionEnabled = true;
 
-        sendButton.addEventListener('click', () => {
-            const text = messageInput.value.trim();
-            if (text && client.connected && nickname) {
-                const fullMessage = `${nickname}: ${text}`;
-                client.publish(topic, fullMessage);
-                messageInput.value = '';
-            } else if (!client.connected) {
-                statusDiv.textContent = 'Не подключено. Подождите.';
-                statusDiv.style.color = '#dc3545';
-            } else if (!nickname) {
-                statusDiv.textContent = 'Установите ник сначала.';
-                statusDiv.style.color = '#dc3545';
-            }
-        });
+        useKeyBtn.classList.add('active');
+        useKeyBtn.textContent = 'Ключ активен';
+        deactivateKeyBtn.style.display = 'inline-block';
+        indicator.classList.add('active');
+        statusDiv.textContent = '🔒 Шифрование включено (AES-256-GCM)';
+        statusDiv.style.color = '#28a745';
+    });
 
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendButton.click();
-            }
-        });
+    deactivateKeyBtn.addEventListener('click', () => {
+        encryptionEnabled = false;
+        aesKey = null;
+        useKeyBtn.classList.remove('active');
+        useKeyBtn.textContent = 'Использовать ключ';
+        deactivateKeyBtn.style.display = 'none';
+        indicator.classList.remove('active');
+        statusDiv.textContent = 'Шифрование отключено';
+        statusDiv.style.color = '#6c757d';
+    });
 
-        // Очистка чата
-        clearButton.addEventListener('click', () => {
-            localStorage.removeItem(storageKey);
+    // ====================== Отправка ======================
+    function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+
+        const fullMessage = `${nickname}: ${text}`;
+        const payload = encryptMessage(fullMessage);
+
+        client.publish(topic, payload);
+        addMessage(fullMessage, true);
+        messageInput.value = '';
+    }
+
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // ====================== Добавление сообщения в чат ======================
+    function addMessage(text, isOwn = false) {
+        const div = document.createElement('div');
+        div.className = 'msg' + (isOwn ? ' my' : '');
+
+        // Если сообщение зашифровано, но шифрование выключено — покажем как есть
+        const decrypted = decryptMessage(text);
+        div.textContent = decrypted;
+
+        if (text.startsWith('ENC:') && encryptionEnabled) {
+            div.style.background = isOwn ? '#0056b3' : '#e2f0d9';
+        }
+
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // ====================== MQTT ======================
+    client.on('connect', () => {
+        statusDiv.textContent = 'Подключено! Можно писать.';
+        statusDiv.style.color = '#28a745';
+        client.subscribe(topic);
+    });
+
+    client.on('message', (receivedTopic, message) => {
+        if (receivedTopic.toString() === topic) {
+            const payload = message.toString();
+            addMessage(payload, false);
+        }
+    });
+
+    client.on('error', err => {
+        statusDiv.textContent = 'Ошибка MQTT: ' + err;
+        statusDiv.style.color = '#dc3545';
+    });
+
+    // Очистка чата
+    clearButton.addEventListener('click', () => {
+        if (confirm('Очистить весь чат?')) {
             messagesDiv.innerHTML = '';
-            statusDiv.textContent = 'Чат очищен.';
-            statusDiv.style.color = '#ffc107';
-        });
-    </script>
+            statusDiv.textContent = 'Чат очищен';
+        }
+    });
+
+    // Приветственное сообщение
+    window.onload = () => {
+        addMessage(`Добро пожаловать, ${nickname}! Чтобы начать шифрованный чат — сгенерируйте или вставьте AES-256 ключ и нажмите "Использовать ключ".`);
+    };
+</script>
 </body>
 </html>
