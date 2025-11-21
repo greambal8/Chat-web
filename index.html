@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔒 ЗАКРЫТЫЕ ЧАТ-КОМПАНИ • Финальная версия</title>
+    <title>🔒 ЗАКРЫТЫЙ ЧАТ-КОМПАНИ</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -16,14 +16,41 @@
         @keyframes fadeIn {from{opacity:0;transform:translateY(10px)}to{opacity:1}}
 
         .panel {padding:14px 16px;background:#e9f7ef;border-bottom:1px solid #c3e6cb;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;}
-        .panel input, .panel button {padding:11px 14px;border-radius:12px;border:none;font-size:15px;}
+        .panel input, .panel button {padding:11px 14px;border-radius:12px;border:none;font-size:15px;position:relative;}
         .panel input {background:#fff;border:1px solid #ced4da;font-family:monospace;}
         #room-number {width:110px;text-align:center;}
         #max-users {width:60px;text-align:center;}
         #generate-room, #generate-key {background:#ffc107;color:#212529;cursor:pointer;}
-        #enter-room, #activate-key, #deactivate-key {background:#28a745;color:#fff;cursor:pointer;font-weight:500;}
-        #deactivate-key {background:#dc3545;display:none;}
+        #enter-room, #activate-key {background:#28a745;color:#fff;cursor:pointer;font-weight:500;}
+        #deactivate-key {background:#dc3545;color:#fff;display:none;}
         #activate-key.active {background:#1e7e34;}
+
+        /* Стиль тултипов */
+        [title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            white-space: nowrap;
+            z-index: 100;
+            opacity: 0.9;
+        }
+        [title]:hover::before {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-bottom-color: #333;
+            z-index: 100;
+        }
 
         #input-container {display:flex;padding:15px;background:#f8f9fa;border-top:1px solid #e9ecef;gap:10px;align-items:center;}
         #message-input {flex:1;padding:12px;border:1px solid #ced4da;border-radius:10px;font-size:16px;}
@@ -39,17 +66,17 @@
 
 <div id="chat-container">
     <div class="panel">
-        <input type="number" id="room-number" placeholder="Номер" value="921502">
-        <button id="generate-room">🎲 Случайный</button>
-        <input type="number" id="max-users" placeholder="Лимит без меня" min="1" max="20" value="1">
-        <button id="enter-room">Войти в комнату</button>
+        <input type="number" id="room-number" placeholder="Номер" value="921502" title="Уникальный номер комнаты (6 цифр). Передайте его только тем, кому доверяете!">
+        <button id="generate-room" title="Сгенерировать случайный безопасный номер комнаты">🎲 Случайный</button>
+        <input type="number" id="max-users" placeholder="Лимит без меня" min="1" max="20" value="1" title="Сколько человек (кроме вас) может войти в комнату">
+        <button id="enter-room" title="Подключиться к комнате по номеру">Войти в комнату</button>
     </div>
 
     <div class="panel" id="key-panel" style="display:none;background:#e8f5e9;">
-        <input type="text" id="aes-key-input" placeholder="AES-256 ключ (64 hex)" maxlength="64">
-        <button id="generate-key">🔑 Сгенерировать</button>
-        <button id="activate-key">Активировать ключ</button>
-        <button id="deactivate-key">Деактивировать</button>
+        <input type="text" id="aes-key-input" placeholder="AES-256 ключ (64 hex)" maxlength="64" title="Ключ шифрования AES-256. Должен быть ровно 64 символа в шестнадцатеричном формате">
+        <button id="generate-key" title="Сгенерировать надёжный 256-битный ключ одним кликом">🔑 Сгенерировать</button>
+        <button id="activate-key" title="Включить end-to-end шифрование для всех сообщений">Активировать ключ</button>
+        <button id="deactivate-key" title="Отключить шифрование (сообщения будут в открытом виде)">Деактивировать</button>
     </div>
 
     <div id="warning"></div>
@@ -63,7 +90,7 @@
         </button>
     </div>
 
-    <div id="status">Готов. Введи номер → Войти → Ключ → Активировать</div>
+    <div id="status">Готов. Наведи курсор на элементы — увидишь подсказки</div>
 </div>
 
 <script>
@@ -96,14 +123,12 @@
     let currentUsers = 0;
     let isRoomFull = false;
 
-    // Генерация номера комнаты
     generateRoomBtn.onclick = () => roomInput.value = Math.floor(100000 + Math.random() * 900000);
 
-    // Вход в комнату
     enterRoomBtn.onclick = () => {
         const room = roomInput.value.trim();
         if (!room || room < 1) return alert('Укажи номер комнаты!');
-        currentTopic = `greambal8-room-${room}`;
+        currentTopic = `rooms-${room}`;
         maxAllowed = (parseInt(maxUsersInput.value) || 1) + 1;
 
         client.subscribe(currentTopic);
@@ -115,13 +140,11 @@
         enterRoomBtn.disabled = true;
     };
 
-    // Генерация ключа
     generateKeyBtn.onclick = () => {
         const k = crypto.getRandomValues(new Uint8Array(32));
         aesKeyInput.value = Array.from(k).map(b => b.toString(16).padStart(2,'0')).join('');
     };
 
-    // Активация ключа
     activateKeyBtn.onclick = async () => {
         const hex = aesKeyInput.value.trim();
         if (!/^[0-9a-fA-F]{64}$/.test(hex)) return alert('Ключ — ровно 64 hex символа!');
@@ -144,7 +167,6 @@
         addSystemMessage(`🔒 Шифрование включено. Только с этим ключом видно сообщения.`);
     };
 
-    // Деактивация ключа
     deactivateKeyBtn.onclick = () => {
         encryptionEnabled = false;
         cryptoKey = null;
@@ -157,7 +179,6 @@
         addSystemMessage('🔓 Шифрование отключено');
     };
 
-    // Шифрование / дешифрование
     async function encrypt(text) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const data = new TextEncoder().encode(text);
@@ -185,7 +206,6 @@
         return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b,16))).buffer;
     }
 
-    // Отправка сообщения
     async function send() {
         if (isRoomFull) return alert('Комната переполнена!');
         const text = messageInput.value.trim();
@@ -195,15 +215,12 @@
         const payload = encryptionEnabled ? await encrypt(fullText) : fullText;
 
         client.publish(currentTopic, payload);
-
-        // Показываем своё сообщение сразу (без дубля)
         addMessage(fullText, true);
         messageInput.value = '';
     }
     sendButton.onclick = send;
     messageInput.onkeydown = e => { if (e.key === 'Enter') send(); };
 
-    // Добавление обычного сообщения
     async function addMessage(text, isOwn = false) {
         const div = document.createElement('div');
         div.className = 'msg' + (isOwn ? ' my' : '');
@@ -212,7 +229,6 @@
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    // Системное сообщение
     function addSystemMessage(text) {
         const div = document.createElement('div');
         div.className = 'system';
@@ -221,7 +237,6 @@
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    // Приём сообщений
     client.on('message', async (topic, msg) => {
         if (topic !== currentTopic) return;
         const payload = msg.toString();
@@ -234,19 +249,14 @@
 
             if (currentUsers > maxAllowed) {
                 isRoomFull = true;
-                warningDiv.textContent = '⚠ Комната переполнена! Новые участники не могут писать и не видят старые сообщения.';
+                warningDiv.textContent = '⚠ Комната переполнена! Новые участники не видят сообщения и не могут писать.';
                 warningDiv.style.display = 'block';
                 inputContainer.style.display = 'none';
             }
             return;
         }
 
-        // Обычные сообщения
-        if (encryptionEnabled || payload.startsWith('ENC:')) {
-            addMessage(payload);
-        } else {
-            addMessage(payload);
-        }
+        addMessage(payload);
     });
 
     client.on('connect', () => statusDiv.textContent += ' • MQTT готов');
